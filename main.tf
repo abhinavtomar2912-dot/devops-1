@@ -3,9 +3,9 @@
 ############################
 terraform {
   backend "s3" {
-    bucket         = "amzn-s3-new-bkt"   # must already exist
-    key            = "eks/terraform.tfstate"
-    region         = "us-east-1"
+    bucket = "amzn-s3-new-bkt"   # must already exist
+    key    = "eks/terraform.tfstate"
+    region = "us-east-1"
   }
 }
 
@@ -40,16 +40,25 @@ resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
 }
 
 ############################
-# DATA: DEFAULT VPC + SUBNETS
+# DATA: DEFAULT VPC + FILTERED SUBNETS (FIX)
 ############################
 data "aws_vpc" "existing" {
   default = true
 }
 
-data "aws_subnets" "existing" {
+data "aws_subnets" "eks_subnets" {
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.existing.id]
+  }
+
+  filter {
+    name   = "availability-zone"
+    values = [
+      "us-east-1a",
+      "us-east-1b",
+      "us-east-1c"
+    ]
   }
 }
 
@@ -61,7 +70,7 @@ resource "aws_eks_cluster" "eks" {
   role_arn = aws_iam_role.eks_cluster_role.arn
 
   vpc_config {
-    subnet_ids = data.aws_subnets.existing.ids
+    subnet_ids = data.aws_subnets.eks_subnets.ids
   }
 
   depends_on = [
@@ -121,7 +130,7 @@ resource "aws_iam_role_policy_attachment" "ecr_policy" {
 resource "aws_eks_node_group" "nodes" {
   cluster_name   = aws_eks_cluster.eks.name
   node_role_arn = aws_iam_role.node_role.arn
-  subnet_ids    = data.aws_subnets.existing.ids
+  subnet_ids    = data.aws_subnets.eks_subnets.ids
 
   instance_types = ["m7i-flex.large"]
 
